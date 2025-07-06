@@ -41,7 +41,11 @@ spec:
     {{- if .Values.kubeScheduler.serviceMonitor.proxyUrl }}
     proxyUrl: {{ .Values.kubeScheduler.serviceMonitor.proxyUrl}}
     {{- end }}
-    {{- if eq (include "kube-prometheus-stack.kubeScheduler.insecureScrape" (list . false true .Values.kubeScheduler.serviceMonitor.https )) "true" }}
+    {{- if .Values.controlPlaneProxy.enabled }}
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+    {{- else if eq (include "kube-prometheus-stack.kubeScheduler.insecureScrape" (list . false true .Values.kubeScheduler.serviceMonitor.https )) "true" }}
     scheme: https
     tlsConfig:
       caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt

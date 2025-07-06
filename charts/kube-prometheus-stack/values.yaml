@@ -5365,6 +5365,184 @@ thanosRuler:
   #     foo:$apr1$OFG3Xybp$ckL0FHDAkoXYIlH9.cysT0
   #     someoneelse:$apr1$DMZX2Z4q$6SbQIfyuLQd.xmo/P0m2c.
 
+controlPlaneProxy:
+  enabled: true
+  ## Labels to add to the control-plane-proxy DaemonSet
+  ##
+  labels: {}
+
+  ## Annotations to add to the control-plane-proxy DaemonSet
+  ##
+  annotations: {}
+
+  ## Labels to add to the control-plane-proxy DaemonSet
+  ##
+  podLabels: {}
+
+  ## Annotations to add to the control-plane-proxy DaemonSet
+  ##
+  podAnnotations: {}
+
+  ## Strategy of the control-plane-proxy DaemonSet
+  ##
+  updateStrategy: {}
+
+  image:
+    registry: quay.io
+    repository: brancz/kube-rbac-proxy
+    tag: v0.19.1
+    sha: ""
+    pullPolicy: IfNotPresent
+
+  ## Define resources requests and limits for single Pods.
+  ## ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+  ##
+  resources: {}
+
+  ## Provide a priority class name to the control-plane-proxy DaemonSet
+  ##
+  priorityClassName: ""
+
+  ## SecurityContext holds pod-level security attributes and common container settings.
+  ## This defaults to non root user with uid 1000 and gid 2000. *v1.PodSecurityContext  false
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+  ##
+  podSecurityContext:
+    fsGroup: 65533
+    runAsGroup: 65533
+    runAsNonRoot: true
+    runAsUser: 65533
+    seccompProfile:
+      type: RuntimeDefault
+
+  ## SecurityContext holds pod-level security attributes and common container settings.
+  ## This defaults to non root user with uid 2000 and gid 2000. *v1.PodSecurityContext  false
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+  ##
+  securityContext: {}
+
+  ## Define which Nodes the Pods are scheduled on.
+  ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+  ##
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+
+  ## Assign custom affinity rules to the control-plane-proxy DaemonSet
+  ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+  ##
+  affinity: {}
+  # nodeAffinity:
+  #   requiredDuringSchedulingIgnoredDuringExecution:
+  #     nodeSelectorTerms:
+  #     - matchExpressions:
+  #       - key: kubernetes.io/e2e-az-name
+  #         operator: In
+  #         values:
+  #         - e2e-az1
+  #         - e2e-az2
+
+  ## If specified, the pod's tolerations.
+  ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+  ##
+  tolerations:
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Equal"
+    effect: "NoSchedule"
+
+  ## Service account for control-plane-proxy DaemonSet to use.
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+  ##
+  serviceAccount:
+    create: true
+    name: ""
+    automountServiceAccountToken: true
+    annotations: {}
+
+  ## Liveness probe for the prometheusOperator deployment
+  ##
+  livenessProbe:
+    enabled: true
+    failureThreshold: 3
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 1
+  ## Readiness probe for the prometheusOperator deployment
+  ##
+  readinessProbe:
+    enabled: true
+    failureThreshold: 3
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 1
+
+  tls:
+    selfSignedCerts:
+      enabled: true
+      image:
+        registry: docker.io
+        repository: alpine/openssl
+        tag: 3.5.1
+        sha: ""
+        pullPolicy: IfNotPresent
+
+      ## Define resources requests and limits for single Pods.
+      ## ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+      ##
+      resources: {}
+      ## SecurityContext holds pod-level security attributes and common container settings.
+      ## This defaults to non root user with uid 2000 and gid 2000. *v1.PodSecurityContext  false
+      ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+      ##
+      securityContext: {}
+      command:
+        - openssl
+      args:
+        - req
+        - -x509
+        - -newkey
+        - ec
+        - -pkeyopt
+        - ec_paramgen_curve:P-384
+        - -nodes
+        - -keyout
+        - /cert/tls.key
+        - -out
+        - /cert/tls.crt
+        - -days
+        - "365"
+        - -subj
+        - "/CN=$(HOST_NAME)"
+        - -addext
+        - "subjectAltName=DNS:$(HOST_NAME), IP:$(HOST_IP)"
+
+  services:
+    etcd:
+      enabled: true
+      listenPort: "2381"
+      healthEndpointsPort: "28001"
+      upstream: "http://127.0.0.1:2381/"
+      allowPaths:
+        - "/metrics"
+      extraArgs: []
+    kube-controller-manager:
+      enabled: true
+      listenPort: "10257"
+      healthEndpointsPort: "28002"
+      upstream: "https://127.0.0.1:10257/"
+      allowPaths:
+        - "/metrics"
+      extraArgs: []
+    kube-scheduler:
+      enabled: true
+      listenPort: "10259"
+      healthEndpointsPort: "28003"
+      upstream: "https://127.0.0.1:10259/"
+      allowPaths:
+        - "/metrics"
+      extraArgs: []
+
 ## Setting to true produces cleaner resource names, but requires a data migration because the name of the persistent volume changes. Therefore this should only be set once on initial installation.
 ##
 cleanPrometheusOperatorObjectNames: false

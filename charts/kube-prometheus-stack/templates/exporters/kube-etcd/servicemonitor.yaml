@@ -41,7 +41,11 @@ spec:
     {{- if .Values.kubeEtcd.serviceMonitor.proxyUrl }}
     proxyUrl: {{ .Values.kubeEtcd.serviceMonitor.proxyUrl}}
     {{- end }}
-    {{- if eq .Values.kubeEtcd.serviceMonitor.scheme "https" }}
+    {{- if .Values.controlPlaneProxy.enabled }}
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+    {{- else if eq .Values.kubeEtcd.serviceMonitor.scheme "https" }}
     scheme: https
     tlsConfig:
       {{- if .Values.kubeEtcd.serviceMonitor.serverName }}

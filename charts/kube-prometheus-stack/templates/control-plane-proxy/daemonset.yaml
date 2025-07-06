@@ -1,0 +1,165 @@
+{{- if .Values.controlPlaneProxy.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ template "kube-prometheus-stack.control-plane-proxy.fullname" . }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  labels:
+    {{- include "kube-prometheus-stack.control-plane-proxy.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.controlPlaneProxy.updateStrategy }}
+  updateStrategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ template "kube-prometheus-stack.name" . }}-control-plane-proxy
+      release: {{ $.Release.Name | quote }}
+  template:
+    metadata:
+      labels:
+        {{- include "kube-prometheus-stack.control-plane-proxy.labels" . | nindent 8 }}
+        {{- with .Values.controlPlaneProxy.podLabels }}
+        {{- toYaml . | indent 8 }}
+        {{- end }}
+      {{- with .Values.controlPlaneProxy.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      initContainers:
+        {{- if $.Values.controlPlaneProxy.tls.selfSignedCerts.enabled }}
+        - name: generate-cert
+          {{- if $.Values.controlPlaneProxy.tls.selfSignedCerts.image.sha }}
+          image: "{{ $.Values.global.imageRegistry | default $.Values.controlPlaneProxy.tls.selfSignedCerts.image.registry }}/{{ $.Values.controlPlaneProxy.tls.selfSignedCerts.image.repository }}:{{ $.Values.controlPlaneProxy.tls.selfSignedCerts.image.tag }}@sha256:{{ $.Values.controlPlaneProxy.tls.selfSignedCerts.image.sha }}"
+          {{- else }}
+          image: "{{ $.Values.global.imageRegistry | default $.Values.controlPlaneProxy.tls.selfSignedCerts.image.registry }}/{{ $.Values.controlPlaneProxy.tls.selfSignedCerts.image.repository }}:{{ $.Values.controlPlaneProxy.tls.selfSignedCerts.image.tag }}"
+          {{- end }}
+          imagePullPolicy: {{ $.Values.controlPlaneProxy.image.pullPolicy }}
+          {{- with .Values.controlPlaneProxy.tls.selfSignedCerts.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.controlPlaneProxy.tls.selfSignedCerts.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: HOST_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          {{- with .Values.controlPlaneProxy.tls.selfSignedCerts.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.controlPlaneProxy.tls.selfSignedCerts.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: self-signed-cert
+              mountPath: /cert/
+      {{- end }}
+      containers:
+        {{- range $name, $properties := .Values.controlPlaneProxy.services }}
+        - name: {{ $name }}
+          {{- if $.Values.controlPlaneProxy.image.sha }}
+          image: "{{ $.Values.global.imageRegistry | default $.Values.controlPlaneProxy.image.registry }}/{{ $.Values.controlPlaneProxy.image.repository }}:{{ $.Values.controlPlaneProxy.image.tag }}@sha256:{{ $.Values.controlPlaneProxy.image.sha }}"
+          {{- else }}
+          image: "{{ $.Values.global.imageRegistry | default $.Values.controlPlaneProxy.image.registry }}/{{ $.Values.controlPlaneProxy.image.repository }}:{{ $.Values.controlPlaneProxy.image.tag }}"
+          {{- end }}
+          imagePullPolicy: {{ $.Values.controlPlaneProxy.image.pullPolicy }}
+          args:
+            - "--secure-listen-address=$(HOST_IP):{{ $properties.listenPort }}"
+            - "--upstream={{ $properties.upstream }}"
+            - "--http2-disable"
+            - "--allow-paths={{ $properties.allowPaths | join "," }}"
+            - "--proxy-endpoints-port={{ $properties.healthEndpointsPort }}"
+            - "--tls-cert-file=/cert/tls.crt"
+            - "--tls-private-key-file=/cert/tls.key"
+          ports:
+            - containerPort: {{ $properties.listenPort }}
+              name: "metrics-{{ $properties.listenPort }}"
+            - containerPort: {{ $properties.healthEndpointsPort }}
+              name: "probes-{{ $properties.listenPort }}"
+          env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: HOST_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          {{- if $.Values.controlPlaneProxy.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: "probes-{{ $properties.listenPort }}"
+              scheme: HTTPS
+            initialDelaySeconds: {{ $.Values.prometheusOperator.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $.Values.prometheusOperator.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ $.Values.prometheusOperator.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ $.Values.prometheusOperator.readinessProbe.successThreshold }}
+            failureThreshold: {{ $.Values.prometheusOperator.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- if $.Values.controlPlaneProxy.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: "probes-{{ $properties.listenPort }}"
+              scheme: HTTPS
+            initialDelaySeconds: {{ $.Values.prometheusOperator.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $.Values.prometheusOperator.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ $.Values.prometheusOperator.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ $.Values.prometheusOperator.livenessProbe.successThreshold }}
+            failureThreshold: {{ $.Values.prometheusOperator.livenessProbe.failureThreshold }}
+          {{- end }}
+          volumeMounts:
+            {{- if $.Values.controlPlaneProxy.tls.selfSignedCerts.enabled }}
+            - name: self-signed-cert
+              mountPath: /cert/
+              readOnly: true
+            {{- end }}
+        {{- end }}
+      serviceAccountName: {{ template "kube-prometheus-stack.control-plane-proxy.serviceAccountName" . }}
+      {{- with .Values.controlPlaneProxy.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- include "kube-prometheus-stack.imagePullSecrets" $ | indent 8 }}
+      {{- end }}
+      automountServiceAccountToken: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- with .Values.controlPlaneProxy.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controlPlaneProxy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controlPlaneProxy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controlPlaneProxy.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
+      {{- with .Values.controlPlaneProxy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      {{- if $.Values.controlPlaneProxy.tls.selfSignedCerts.enabled }}
+        - name: self-signed-cert
+          emptyDir: {}
+      {{- end }}
+{{- end }}

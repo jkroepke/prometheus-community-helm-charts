@@ -34,6 +34,16 @@ The longest name that gets created adds and extra 37 characters, so truncation s
 {{- end }}
 {{- end }}
 
+{{/* Fullname suffixed with -control-plane-proxy */}}
+{{/* Adding 9 to 26 truncation of kube-prometheus-stack.fullname */}}
+{{- define "kube-prometheus-stack.control-plane-proxy.fullname" -}}
+{{- if .Values.prometheusOperator.fullnameOverride -}}
+{{- .Values.prometheusOperator.fullnameOverride | trunc 35 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-control-plane-proxy" (include "kube-prometheus-stack.fullname" .) -}}
+{{- end }}
+{{- end }}
+
 {{/* Prometheus custom resource instance name */}}
 {{- define "kube-prometheus-stack.prometheus.crname" -}}
 {{- if .Values.cleanPrometheusOperatorObjectNames }}
@@ -129,6 +139,15 @@ heritage: {{ $.Release.Service | quote }}
     {{ default (include "kube-prometheus-stack.thanosRuler.name" .) .Values.thanosRuler.serviceAccount.name }}
 {{- else -}}
     {{ default "default" .Values.thanosRuler.serviceAccount.name }}
+{{- end -}}
+{{- end -}}
+
+{{/* Create the name of control-plane-proxy service account to use */}}
+{{- define "kube-prometheus-stack.control-plane-proxy.serviceAccountName" -}}
+{{- if .Values.prometheusOperator.serviceAccount.create -}}
+    {{ default (include "kube-prometheus-stack.operator.fullname" .) .Values.controlPlaneProxy.serviceAccount.name }}
+{{- else -}}
+    {{ default "default" .Values.controlPlaneProxy.serviceAccount.name }}
 {{- end -}}
 {{- end -}}
 
