@@ -5430,6 +5430,158 @@ thanosRuler:
   #     foo:$apr1$OFG3Xybp$ckL0FHDAkoXYIlH9.cysT0
   #     someoneelse:$apr1$DMZX2Z4q$6SbQIfyuLQd.xmo/P0m2c.
 
+
+controlPlaneProxy:
+  enabled: true
+
+control-plane-proxy:
+  alertmanager:
+    enabled: false
+  kube-state-metrics:
+    enabled: false
+  prometheus-node-exporter:
+    enabled: false
+  prometheus-pushgateway:
+    enabled: false
+  rbac:
+    enabled: true
+  configmapReload:
+    prometheus:
+      enabled: false
+      containerPort: 29001
+      image:
+        repository: quay.io/prometheus-operator/prometheus-config-reloader
+        tag: v0.86.1
+  server:
+    name: agent
+    namespaces:
+      - kube-system
+    sidecarContainers:
+      rbac-proxy:
+        name: rbac-proxy
+        image: quay.io/brancz/kube-rbac-proxy:v0.20.0
+        imagePullPolicy: IfNotPresent
+        args:
+        - --proxy-endpoints-port=29002
+        - --upstream=http://127.0.0.1:29000/
+        ports:
+        - containerPort: 29002
+          name: proxy
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 100m
+            memory: 50Mi
+          requests:
+            cpu: 100m
+            memory: 50Mi
+    replicaCount: 0
+    image:
+      repository: quay.io/prometheus/prometheus
+      tag: v3.7.3
+    defaultFlagsOverride:
+      - --config.file=/etc/config/prometheus.yml
+      - --agent
+      - --storage.agent.path=/data
+      - --storage.agent.retention.min-time=2h
+      - --storage.agent.retention.max-time=2h
+      - --web.listen-address=127.0.0.1:29000
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --web.console.templates=/etc/prometheus/consoles
+    persistentVolume:
+      enabled: false
+    daemonSet:
+      enabled: true
+    hostNetwork: true
+    resources:
+      limits:
+        memory: 512Mi
+      requests:
+        memory: 128Mi
+    nodeSelector:
+      kubernetes.io/os: linux
+      node-role.kubernetes.io/control-plane: ""
+    tolerations:
+      - effect: NoSchedule
+        operator: Exists
+    remoteWrite:
+      - url: "http://prometheus-operated.{{ $.Release.Namespace }}.svc.cluster.local:9090/api/v1/write"
+    service:
+      enabled: false
+  serverFiles:
+    prometheus.yml:
+      rule_files: []
+      scrape_configs:
+      - job_name: kube-controller-manager
+        honor_timestamps: true
+        track_timestamps_staleness: false
+        scrape_interval: 30s
+        scrape_timeout: 10s
+        always_scrape_classic_histograms: false
+        convert_classic_histograms_to_nhcb: false
+        metrics_path: /metrics
+        scheme: https
+        authorization:
+          type: Bearer
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_component]
+            separator: ;
+            regex: (kube-controller-manager|kube-scheduler)
+            replacement: $1
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            separator: ;
+            target_label: nodename
+            replacement: $1
+            action: replace
+          - source_labels: [__meta_kubernetes_namespace]
+            separator: ;
+            target_label: namespace
+            replacement: $1
+            action: replace
+          - source_labels: [__meta_kubernetes_service_name]
+            separator: ;
+            target_label: service
+            replacement: $1
+            action: replace
+          - source_labels: [__meta_kubernetes_pod_name]
+            separator: ;
+            target_label: pod
+            replacement: $1
+            action: replace
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            separator: ;
+            target_label: container
+            replacement: $1
+            action: replace
+          - source_labels: [__meta_kubernetes_pod_phase]
+            separator: ;
+            regex: (Failed|Succeeded)
+            replacement: $1
+            action: drop
+          - source_labels: [__meta_kubernetes_pod_label_component]
+            separator: ;
+            target_label: job
+            replacement: ${1}
+            action: replace
+        kubernetes_sd_configs:
+          - role: pod
+            follow_redirects: true
+            enable_http2: true
+            namespaces:
+              own_namespace: false
+              names:
+                - kube-system
+            selectors:
+            - role: pod
+              field: spec.nodeName=${NODE_NAME}
+
 ## Setting to true produces cleaner resource names, but requires a data migration because the name of the persistent volume changes. Therefore this should only be set once on initial installation.
 ##
 cleanPrometheusOperatorObjectNames: false
