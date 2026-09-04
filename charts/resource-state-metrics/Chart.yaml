@@ -1,0 +1,24 @@
+apiVersion: v2
+name: resource-state-metrics
+description: Install resource-state-metrics to generate and expose cluster-level metrics
+keywords:
+  - metric
+  - monitoring
+  - prometheus
+  - kubernetes
+type: application
+version: 0.1.0
+# renovate: github-releases=kubernetes/resource-state-metrics
+appVersion: 0.1.0
+home: https://github.com/kubernetes-sigs/resource-state-metrics
+sources:
+  - https://github.com/kubernetes-sigs/resource-state-metrics
+maintainers:
+  - name: Jan-Otto Kröpke
+    email: github@jkroepke.de
+    url: https://github.com/jkroepke
+annotations:
+  "artifacthub.io/license": Apache-2.0
+  "artifacthub.io/links": |
+    - name: Chart Source
+      url: https://github.com/prometheus-community/helm-charts
